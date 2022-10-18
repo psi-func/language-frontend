@@ -1,12 +1,3 @@
-#include <cctype>
-#include <cstdlib>
-#include <cstdio>
-#include <map>
-#include <vector>
-#include <string>
-#include <utility>
-#include <memory>
-
 #include <iostream>
 
 int main()
