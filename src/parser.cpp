@@ -1,10 +1,21 @@
 #include "AST.h"
 #include "tokenizer.h"
+#include "parser.h"
 
 #include <cstdio>
 #include <memory>
 #include <cctype>
 #include <cstdio>
+#include <map>
+#include <string>
+
+using namespace llvm;
+
+LLVMContext TheContext;
+IRBuilder<> Builder((TheContext));
+std::unique_ptr<Module> TheModule;
+std::map<std::string, llvm::Value*> NamedValues;
+
 
 /// CurTok/getNextToken - Provide a simple token buffer.  CurTok is the current
 /// token the parser is looking at.  getNextToken reads another token from the
@@ -42,6 +53,11 @@ std::unique_ptr<ExprAST> LogError(const char *Str)
 
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str)
 {
+    LogError(Str);
+    return nullptr;
+}
+
+Value* LogErrorV(const char *Str) {
     LogError(Str);
     return nullptr;
 }

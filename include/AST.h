@@ -1,15 +1,22 @@
 #pragma once
 
+#include "parser.h"
+
 #include <string>
 #include <vector>
 #include <map>
 #include <memory>
+
+#include <llvm/IR/BasicBlock.h>
+
+using namespace llvm;
 
 /// ExprAST - Base class for all expression nodes.
 class ExprAST
 {
 public:
     virtual ~ExprAST() = default;
+    virtual Value *codegen() = 0;
 };
 
 /// NumberExprAST - Expression class for numeric litarals like "1.0"
@@ -19,6 +26,9 @@ class NumberExprAST : public ExprAST
 
 public:
     NumberExprAST(double Val) : Val(Val) {}
+    Value* codegen() override {
+        return ConstantFP::get(TheContext, APFloat(Val));
+    }
 };
 
 /// VariableExprAST - Expression class fr a binary operator.
@@ -28,6 +38,13 @@ class VariableExprAST : public ExprAST
 
 public:
     VariableExprAST(const std::string &Name) : Name(Name) {}
+
+    Value* codegen() override {
+        Value *V = NamedValues[Name];
+        if (!V)
+            LogErrorV("Unknown variable name");
+        return V;
+    }
 };
 
 /// BinaryExprAST - Expression class for a binary operator.
@@ -43,6 +60,27 @@ public:
         : Op(op),
           LHS(std::move(LHS)),
           RHS(std::move(RHS)) {}
+
+    Value* codegen() override {
+        Value *L = LHS->codegen();
+        Value *R = RHS->codegen();
+        if (!(L && R))
+            return nullptr;
+        
+        switch(Op) {
+            case '+':
+                return Builder.CreateFAdd(L, R, "addtmp");
+            case '-':
+                return Builder.CreateFSub(L, R, "subtmp");
+            case '*':
+                return Builder.CreateFMul(L, R, "multmp");
+            case '<':
+                L = Builder.CreateFCmpULT(L, R, "cmptmp");
+                return Builder.CreateUIToFP(L, Type::getDoubleTy(TheContext), "booltmp");
+            default:
+                return LogErrorV("invalid binaru operator");
+        }
+    }
 };
 
 /// CallExprAST - Expression class fr function calls.
@@ -53,6 +91,23 @@ class CallExprAST : public ExprAST
 
 public:
     CallExprAST(const std::string &Callee, std::vector<std::unique_ptr<ExprAST>> Args) : Callee(Callee), Args(std::move(Args)) {}
+
+    Value* codegen() override {
+        Function *CalleeF = TheModule->getFunction(Callee);
+        if (!CalleeF)
+            return LogErrorV("Unknown function referenced");
+
+        if (CalleeF->arg_size() != Args.size()) 
+            return LogErrorV("Incorrect # arguments passed");
+        
+        std::vector<Value*> ArgsV;
+        for (int i = 0, e = Args.size(); i != e; ++i) {
+            ArgsV.push_back(Args[i]->codegen());
+            if (!ArgsV.back()) 
+                return nullptr;
+        }
+        return Builder.CreateCall(CalleeF, ArgsV, "calltmp");
+    }
 };
 
 /// PrototypeAST - This class represents the "prototype" for a function,
