@@ -11,11 +11,10 @@
 
 using namespace llvm;
 
-LLVMContext TheContext;
-IRBuilder<> Builder((TheContext));
+std::unique_ptr<LLVMContext> TheContext;
 std::unique_ptr<Module> TheModule;
+std::unique_ptr<IRBuilder<>> Builder;
 std::map<std::string, llvm::Value*> NamedValues;
-
 
 /// CurTok/getNextToken - Provide a simple token buffer.  CurTok is the current
 /// token the parser is looking at.  getNextToken reads another token from the
@@ -235,8 +234,12 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
 // TOP LEVEL
 
 static void HandleDefinition() {
-  if (ParseDefinition()) {
-    fprintf(stderr, "Parsed a function definition.\n");
+  if (auto FnAST = ParseDefinition()) {
+    if (auto *FnIR = FnAST->codegen()) {
+        fprintf(stderr, "Read a function definition:");
+        FnIR->print(errs());
+        fprintf(stderr, "\n");
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -244,8 +247,12 @@ static void HandleDefinition() {
 }
 
 static void HandleExtern() {
-  if (ParseExtern()) {
-    fprintf(stderr, "Parsed an extern\n");
+  if (auto ProtoAST = ParseExtern()) {
+    if (auto *FnIR = ProtoAST->codegen()) {
+      fprintf(stderr, "Read extern: ");
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -253,18 +260,33 @@ static void HandleExtern() {
 }
 
 static void HandleTopLevelExpression() {
-  // Evaluate a top-level expression into an anonymous function.
-  if (ParseTopLevelExpr()) {
-    fprintf(stderr, "Parsed a top-level expr\n");
+   // Evaluate a top-level expression into an anonymous function.
+  if (auto FnAST = ParseTopLevelExpr()) {
+    if (auto *FnIR = FnAST->codegen()) {
+      fprintf(stderr, "Read top-level expression:");
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
+
+      // Remove the anonymous expression.
+      FnIR->eraseFromParent();
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
   }
 }
 
+static void InitializeModule() {
+    TheContext = std::make_unique<LLVMContext>();
+    TheModule = std::make_unique<Module>("my jit", *TheContext);
+
+    Builder = std::make_unique<IRBuilder<>>(*TheContext);
+}
 
 /// top ::= definition | external | expression | ';'
 void MainLoop() {
+    InitializeModule();
+
     while(1) {
         fprintf(stderr, "ready> ");
         getNextToken();

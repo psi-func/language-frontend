@@ -9,9 +9,9 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Module.h"
 
-extern llvm::LLVMContext TheContext;
-extern llvm::IRBuilder<> Builder;
+extern std::unique_ptr<llvm::LLVMContext> TheContext;
 extern std::unique_ptr<llvm::Module> TheModule;
+extern std::unique_ptr<llvm::IRBuilder<>> Builder;
 extern std::map<std::string, llvm::Value*> NamedValues;
 
 extern std::map<char, int> BinopPrecendence;
